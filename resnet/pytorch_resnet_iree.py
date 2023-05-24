@@ -63,7 +63,12 @@ bytecode_stream = io.BytesIO()
 mlir.operation.write_bytecode(bytecode_stream)
 flatbuffer = ireec.compile_str(bytecode_stream.getvalue(),
                               target_backends=[device],
-                              input_type=iree_input_type)
+                              input_type=iree_input_type,
+                              extra_args=[
+                                # "--mlir-print-ir-after=iree-flow-form-dispatch-workgroups",
+                                # "--mlir-elide-elementsattrs-if-larger=8",
+                                "--iree-flow-dump-dispatch-graph",
+                                "--iree-flow-dump-dispatch-graph-output-file=foo.dot"])
 
 iree_device = ireert.get_device(device)
 config = ireert.Config(device=iree_device)
