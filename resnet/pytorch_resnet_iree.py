@@ -38,15 +38,17 @@ device = "cuda"
 input_batch = input_batch.to(device)
 model.to(device)
 
+model.half()
+input_batch = input_batch.half()
+
 # warmup
 with torch.no_grad():
     output = model(input_batch)
 
-start = time.time()
-with torch.no_grad():
+    start = time.time()
     output = model(input_batch)
-print("torch result", output[0, 0])
-print("torch time", time.time() - start)
+    print("torch result", output[0, 0])
+    print("torch time", time.time() - start)
 
 # IREE
 mlir = torch_mlir.compile(
@@ -55,8 +57,8 @@ mlir = torch_mlir.compile(
     output_type="linalg-on-tensors",
     use_tracing=True)
 
-with open("torch.mlir", "w") as f:
-    f.write(str(mlir))
+# with open("torch.mlir", "w") as f:
+#     f.write(str(mlir))
 
 iree_input_type = "tm_tensor"
 bytecode_stream = io.BytesIO()
