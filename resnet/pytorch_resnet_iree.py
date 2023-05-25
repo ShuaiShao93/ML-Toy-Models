@@ -67,6 +67,7 @@ flatbuffer = ireec.compile_str(bytecode_stream.getvalue(),
                               target_backends=[device],
                               input_type=iree_input_type,
                               extra_args=[
+                                "--iree-hal-cuda-llvm-target-arch=sm_75",
                                 # "--mlir-print-ir-after=iree-flow-form-dispatch-workgroups",
                                 # "--mlir-elide-elementsattrs-if-larger=8",
                                 "--iree-flow-dump-dispatch-graph",
