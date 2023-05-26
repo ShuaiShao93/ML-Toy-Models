@@ -1,3 +1,7 @@
+"""
+nsys profile --force-overwrite true -w true -t cublas,cuda,nvtx,osrt -s cpu -o /tmp/pytorch_resnet_iree python resnet/pytorch_resnet_iree.py
+"""
+
 import torch
 
 import os
@@ -18,7 +22,7 @@ model.eval()
 
 # Download an example image from the pytorch website
 import urllib
-url, filename = ("https://github.com/pytorch/hub/raw/master/images/dog.jpg", "dog.jpg")
+url, filename = ("https://github.com/pytorch/hub/raw/master/images/dog.jpg", "/tmp/dog.jpg")
 try: urllib.URLopener().retrieve(url, filename)
 except: urllib.request.urlretrieve(url, filename)
 
