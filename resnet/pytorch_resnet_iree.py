@@ -11,6 +11,8 @@ import iree.runtime as ireert
 
 # os.environ["IREE_SAVE_TEMPS"] = "./"
 
+FP16 = False
+
 model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
 model.eval()
 
@@ -38,8 +40,9 @@ device = "cuda"
 input_batch = input_batch.to(device)
 model.to(device)
 
-model.half()
-input_batch = input_batch.half()
+if FP16:
+    model.half()
+    input_batch = input_batch.half()
 
 # warmup
 with torch.no_grad():
