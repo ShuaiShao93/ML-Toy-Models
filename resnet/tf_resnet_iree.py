@@ -41,6 +41,14 @@ os.system("iree-import-tf --output-format=mlir-bytecode --tf-import-type=savedmo
 with open("/tmp/resnet50.mlir", "r") as f:
     mlir = f.read()
 
+# os.system(
+#     "~/iree-build/tools/iree-compile --iree-hal-target-backends=cuda --iree-hal-cuda-llvm-target-arch=sm_75 --iree-input-type=mhlo /tmp/resnet50.mlir -o /tmp/resnet50.vmfb"
+# )
+
+# os.system(
+#     "~/iree-build/tools/iree-run-module --device=cuda --module=/tmp/resnet50.vmfb --function=forward --input=\"1x224x224x3xf32=0\""
+# )
+
 device = "cuda"
 iree_input_type = "mhlo"
 flatbuffer = ireec.compile_str(mlir,
