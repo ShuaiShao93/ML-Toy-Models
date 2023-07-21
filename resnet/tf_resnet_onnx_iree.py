@@ -1,12 +1,17 @@
 import os
 import time
 
+import onnx
 import tensorflow as tf
 import numpy as np
 
 import iree.compiler as ireec
 import iree.runtime as ireert
-from iree.compiler import tf as tfc
+
+SAVED_MODEL_PATH = "/tmp/resnet50"
+ONNX_MODEL_PATH = SAVED_MODEL_PATH + ".onnx"
+MHLO_PATH = SAVED_MODEL_PATH + ".mhlo.mlir"
+VMFB_PATH = SAVED_MODEL_PATH + ".vmfb"
 
 class ResNet50(tf.Module):
     def __init__(self):
@@ -28,29 +33,30 @@ print("tf result", resnet.forward(input_batch)[0, 0])
 tensor_specs = [tf.TensorSpec((1, 224, 224, 3), tf.float32)]
 call_signature = resnet.forward.get_concrete_function(*tensor_specs)
 
-saved_model_path = "/tmp/resnet50"
-os.makedirs(saved_model_path, exist_ok=True)
-print(f"Saving {saved_model_path} with call signature: {call_signature}")
-tf.saved_model.save(resnet, saved_model_path,
+os.makedirs(SAVED_MODEL_PATH, exist_ok=True)
+print(f"Saving {SAVED_MODEL_PATH} with call signature: {call_signature}")
+tf.saved_model.save(resnet, SAVED_MODEL_PATH,
                     signatures={"serving_default": call_signature})
 
-# mlir = tfc.compile_saved_model(saved_model_path, import_type=tfc.ImportType.V2, import_only=True, exported_names="forward", saved_model_tags="serving")
-# print(mlir)
+# convert to onnx
+assert os.system(
+    f"python -m tf2onnx.convert --saved-model {SAVED_MODEL_PATH} --output {ONNX_MODEL_PATH}") == 0
+print(f"Saved onnx to {ONNX_MODEL_PATH}")
 
-os.system("iree-import-tf --output-format=mlir-bytecode --tf-import-type=savedmodel_v2 --tf-savedmodel-exported-names=forward /tmp/resnet50 -o /tmp/resnet50.mlir")
-with open("/tmp/resnet50.mlir", "r") as f:
-    mlir = f.read()
+# inspect onnx graph/node
+# onnx_model = onnx.load(ONNX_MODEL_PATH)
+# for node in onnx_model.graph.node:
+#     if node.op_type == "Conv":
+#         print(node)
 
-# os.system(
-#     "~/iree-build/tools/iree-compile --iree-hal-target-backends=cuda --iree-hal-cuda-llvm-target-arch=sm_75 --iree-input-type=mhlo /tmp/resnet50.mlir -o /tmp/resnet50.vmfb"
-# )
+# onnx to mhlo
+ONNX_FRONTEND_PATH = "~/byteir/frontends/onnx-frontend/build/onnx-frontend/src/onnx-frontend"
+assert os.system(f"{ONNX_FRONTEND_PATH} {ONNX_MODEL_PATH} -batch-size=1 -o {MHLO_PATH}") == 0
+print(f"Saved mhlo to {MHLO_PATH}")
 
-# os.system(
-#     "~/iree-build/tools/iree-run-module --device=cuda --module=/tmp/resnet50.vmfb --function=forward --input=\"1x224x224x3xf32=0\""
-# )
-
+mlir = open(MHLO_PATH, "r").read()
 device = "cuda"
-iree_input_type = "stablehlo"
+iree_input_type = "mhlo"
 flatbuffer = ireec.compile_str(mlir,
                               target_backends=[device],
                               input_type=iree_input_type,
@@ -76,3 +82,4 @@ result = invoker.forward(iree_input_batch)
 numpy_result = np.asarray(result)
 print("iree result", numpy_result[0][0])
 print("iree time", time.time() - start)
+
