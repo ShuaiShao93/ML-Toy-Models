@@ -3,11 +3,11 @@
 import os
 import trex
 
-MODEL_NAME = "ResNet18"
+MODEL_NAME = "resnet50"
 MODEL_PATH = f"/tmp/{MODEL_NAME}.onnx"
 
 cmd = "python3 TensorRT/tools/experimental/trt-engine-explorer/utils/process_engine.py"
-cmd += f" {MODEL_PATH} /tmp/{MODEL_NAME}_trex/ fp16"
+cmd += f" {MODEL_PATH} /tmp/{MODEL_NAME}_trex/ fp16 inputIOFormats=fp32:hwc"
 os.system(cmd)
 
 engine_name = f"/tmp/{MODEL_NAME}_trex/{MODEL_NAME}.onnx.engine"
