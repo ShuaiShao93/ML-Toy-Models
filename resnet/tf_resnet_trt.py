@@ -7,6 +7,7 @@ import tensorrt as trt
 import pycuda.driver as cuda
 import pycuda.autoinit
 
+DYNAMIC_BATCH_SIZE = True
 SAVED_MODEL_DIR = "/tmp/resnet50"
 ONNX_MODEL_PATH = SAVED_MODEL_DIR + ".onnx"
 TRT_MODEL_PATH = SAVED_MODEL_DIR + ".trt"
@@ -30,7 +31,8 @@ output = resnet.forward(input_batch).numpy()
 print("tf result", output[0, 0])
 
 # Save saved model.
-tensor_specs = [tf.TensorSpec((1, 224, 224, 3), tf.float32)]
+batch_size = None if DYNAMIC_BATCH_SIZE else 1
+tensor_specs = [tf.TensorSpec((batch_size, 224, 224, 3), tf.float32)]
 call_signature = resnet.forward.get_concrete_function(*tensor_specs)
 
 os.makedirs(SAVED_MODEL_DIR, exist_ok=True)
@@ -61,14 +63,26 @@ assert os.system(
 # onnx.save(onnx_model, ONNX_MODEL_PATH)
 
 # convert to trt
-assert os.system(
-    f"trtexec --onnx={ONNX_MODEL_PATH} --saveEngine={TRT_MODEL_PATH} --inputIOFormats=fp32:hwc") == 0
+args = [
+    f"--onnx={ONNX_MODEL_PATH}",
+    f"--saveEngine={TRT_MODEL_PATH}",
+    "--inputIOFormats=fp32:hwc"
+]
+if DYNAMIC_BATCH_SIZE:
+    args.append("--minShapes=inputs:1x224x224x3")
+    args.append("--maxShapes=inputs:8x224x224x3")
+    args.append("--optShapes=inputs:1x224x224x3")
+
+assert os.system(f"trtexec {' '.join(args)}") == 0
 
 # Load serialized TensorRT model, and run inference.
 runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
 with open(TRT_MODEL_PATH, "rb") as f:
     engine = runtime.deserialize_cuda_engine(f.read())
 context = engine.create_execution_context()
+
+if DYNAMIC_BATCH_SIZE:
+    context.set_binding_shape(0, input_batch.shape)
 
 d_input = cuda.mem_alloc(1 * input_batch.nbytes)
 d_output = cuda.mem_alloc(1 * output.nbytes)
