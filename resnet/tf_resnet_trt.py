@@ -8,6 +8,7 @@ import pycuda.driver as cuda
 import pycuda.autoinit
 
 DYNAMIC_BATCH_SIZE = True
+USE_TRTEXEC = False
 SAVED_MODEL_DIR = "/tmp/resnet50"
 ONNX_MODEL_PATH = SAVED_MODEL_DIR + ".onnx"
 TRT_MODEL_PATH = SAVED_MODEL_DIR + ".trt"
@@ -24,6 +25,7 @@ class ResNet50(tf.Module):
     @tf.function
     def forward(self, inputs):
         return self.model(inputs, training=False)
+
 
 resnet = ResNet50()
 input_batch = np.float32(np.random.rand(1, 224, 224, 3))
@@ -63,22 +65,58 @@ assert os.system(
 # onnx.save(onnx_model, ONNX_MODEL_PATH)
 
 # convert to trt
-args = [
-    f"--onnx={ONNX_MODEL_PATH}",
-    f"--saveEngine={TRT_MODEL_PATH}",
-    "--inputIOFormats=fp32:hwc"
-]
-if DYNAMIC_BATCH_SIZE:
-    args.append("--minShapes=inputs:1x224x224x3")
-    args.append("--maxShapes=inputs:8x224x224x3")
-    args.append("--optShapes=inputs:1x224x224x3")
+trt_logger = trt.Logger(trt.Logger.WARNING)
+if USE_TRTEXEC:
+    args = [
+        f"--onnx={ONNX_MODEL_PATH}",
+        f"--saveEngine={TRT_MODEL_PATH}",
+        "--inputIOFormats=fp32:hwc"
+    ]
+    if DYNAMIC_BATCH_SIZE:
+        args.append("--minShapes=inputs:1x224x224x3")
+        args.append("--maxShapes=inputs:8x224x224x3")
+        args.append("--optShapes=inputs:1x224x224x3")
 
-assert os.system(f"trtexec {' '.join(args)}") == 0
+    assert os.system(f"trtexec {' '.join(args)}") == 0
+else:
+    builder = trt.Builder(trt_logger)
+    EXPLICIT_BATCH = 1 << (int)(
+        trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+    network = builder.create_network(EXPLICIT_BATCH)
+
+    parser = trt.OnnxParser(network, trt_logger)
+    with open(ONNX_MODEL_PATH, "rb") as f:
+        assert parser.parse(f.read()), "ERROR: Failed to parse the ONNX file."
+
+    input_tensor = network.get_input(0)
+    assert input_tensor.name == "inputs"
+    input_tensor.allowed_formats = 1 << int(trt.TensorFormat.HWC)
+
+    config = builder.create_builder_config()
+    config.set_flag(trt.BuilderFlag.FP16)
+    config.set_flag(trt.BuilderFlag.DIRECT_IO)
+    config.profiling_verbosity = trt.ProfilingVerbosity.VERBOSE
+
+    if DYNAMIC_BATCH_SIZE:
+        opt_profile = builder.create_optimization_profile()
+        opt_profile.set_shape("inputs", min=(1, 224, 224, 3), opt=(
+            1, 224, 224, 3), max=(8, 224, 224, 3))
+        config.add_optimization_profile(opt_profile)
+
+    serialized_engine = builder.build_serialized_network(network, config)
+    with open(TRT_MODEL_PATH, 'wb') as f:
+        f.write(serialized_engine)
 
 # Load serialized TensorRT model, and run inference.
-runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
+runtime = trt.Runtime(trt_logger)
 with open(TRT_MODEL_PATH, "rb") as f:
     engine = runtime.deserialize_cuda_engine(f.read())
+
+# inspector = engine.create_engine_inspector()
+# print('trt_engine layer_info:\n{}'.format(
+#     inspector.get_engine_information(trt.LayerInformationFormat.JSON)
+#     ))
+
 context = engine.create_execution_context()
 
 if DYNAMIC_BATCH_SIZE:
