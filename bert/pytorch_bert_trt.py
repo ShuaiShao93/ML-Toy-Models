@@ -1,5 +1,5 @@
 """
-nsys profile --force-overwrite true -w true -t cublas,cuda,nvtx,osrt -s cpu -o /tmp/pytorch_bert_trt python bert/pytorch_bert_trt.py
+nsys profile --force-overwrite true -w true -t cublas,cudnn,cuda,nvtx,osrt -s cpu -o /tmp/pytorch_bert_trt python bert/pytorch_bert_trt.py
 """
 
 import torch

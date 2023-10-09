@@ -1,5 +1,5 @@
 """
-nsys profile --force-overwrite true -w true -t cublas,cuda,nvtx,osrt -s cpu -o /tmp/tf_trt_general python tf_trt_general.py
+nsys profile --force-overwrite true -w true -t cublas,cudnn,cuda,nvtx,osrt -s cpu -o /tmp/tf_trt_general python tf_trt_general.py
 """
 
 import os

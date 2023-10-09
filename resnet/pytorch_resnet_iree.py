@@ -1,5 +1,5 @@
 """
-nsys profile --force-overwrite true -w true -t cublas,cuda,nvtx,osrt -s cpu -o /tmp/pytorch_resnet_iree python resnet/pytorch_resnet_iree.py
+nsys profile --force-overwrite true -w true -t cublas,cudnn,cuda,nvtx,osrt -s cpu -o /tmp/pytorch_resnet_iree python resnet/pytorch_resnet_iree.py
 """
 
 import torch
