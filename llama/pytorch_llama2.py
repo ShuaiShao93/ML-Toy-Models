@@ -33,23 +33,6 @@ def get_model_and_tokenizer():
 model, tokenizer = get_model_and_tokenizer()
 
 
-# Inference before finetuning
-def run_inference(model, tokenizer, tokenized_sample_input):
-    with torch.no_grad():
-        tokenized_sample_output = model.generate(
-            **tokenized_sample_input,
-            max_new_tokens=MAX_OUTPUT,
-            pad_token_id=tokenizer.pad_token_id,
-        )
-        sample_output = tokenizer.decode(tokenized_sample_output[0])
-    return sample_output
-sample_input = "Where is the best place to get cloud GPUs?"
-tokenized_sample_input = tokenizer(
-    sample_input, return_tensors="pt", max_length=MAX_INPUT, padding=True)
-tokenized_sample_input = tokenized_sample_input.to("cuda")
-print("Output before finetuning:\n", run_inference(model, tokenizer, tokenized_sample_input))
-
-
 MODEL_NAME = "Llama-2-7b-chat-hf"
 PROJECT_NAME = "finetune"
 STEPS = 50
@@ -141,10 +124,26 @@ if FINETUNE_MODEL:
     model.config.use_cache = False
     trainer.train(resume_from_checkpoint=False)
 
-# Inference after finetuning
 del (model)
 del (tokenizer)
+
+# Inference
+def run_inference(model, tokenizer, tokenized_sample_input):
+    with torch.no_grad():
+        tokenized_sample_output = model.generate(
+            **tokenized_sample_input,
+            max_new_tokens=MAX_OUTPUT,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+        sample_output = tokenizer.decode(tokenized_sample_output[0])
+    return sample_output
 base_model, tokenizer = get_model_and_tokenizer()
+sample_input = "Where is the best place to get cloud GPUs?"
+tokenized_sample_input = tokenizer(
+    sample_input, return_tensors="pt", max_length=MAX_INPUT, padding=True)
+tokenized_sample_input = tokenized_sample_input.to("cuda")
+print("Output before finetuning:\n", run_inference(base_model, tokenizer, tokenized_sample_input))
+
 model = peft.PeftModel.from_pretrained(
     base_model, os.path.join(output_dir, f"checkpoint-{STEPS}"))
 model.eval()
