@@ -1,3 +1,7 @@
+"""
+nsys profile --force-overwrite true -w true -t cublas,cudnn,cuda,nvtx,osrt -s cpu -o /tmp/tf_resnet_trt python3 resnet/tf_resnet_trt.py
+"""
+
 import os
 
 import tensorflow as tf
@@ -44,7 +48,7 @@ tf.saved_model.save(resnet, SAVED_MODEL_DIR,
 
 # convert to onnx
 assert os.system(
-    f"python -m tf2onnx.convert --saved-model {SAVED_MODEL_DIR} --output {ONNX_MODEL_PATH}") == 0
+    f"python3 -m tf2onnx.convert --saved-model {SAVED_MODEL_DIR} --output {ONNX_MODEL_PATH}") == 0
 
 # # Load serialized ONNX model and remove transpose
 # onnx_model = onnx.load(ONNX_MODEL_PATH)

@@ -1,13 +1,18 @@
 """
-nsys profile --force-overwrite true -w true -t cublas,cudnn,cuda,nvtx,osrt -s cpu -o /tmp/pytorch_resnet_trt python resnet/pytorch_resnet_trt.py
+nsys profile --force-overwrite true -w true -t cublas,cudnn,cuda,nvtx,osrt -s cpu -o /tmp/pytorch_resnet_trt python3 resnet/pytorch_resnet_trt.py
 """
 
 import torch
 
 import time
 import os
+import tensorrt as trt
+import pycuda.driver as cuda
+import pycuda.autoinit
+import numpy as np
 
-FP16 = False
+FP16 = True
+TRT_MODEL_PATH = "/tmp/ResNet18.trt"
 
 model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
 model.eval()
@@ -34,17 +39,14 @@ input_batch = input_tensor.unsqueeze(0) # create a mini-batch as expected by the
 # move the input and model to GPU for speed
 device = "cuda"
 input_batch = input_batch.to(device)
-model.to(device)
-
-if FP16:
-    model.half()
-    input_batch = input_batch.half()
+model.eval().to(device)
 
 with torch.no_grad():
     output = model(input_batch)
 
     start = time.time()
     output = model(input_batch)
+    print("torch result shape", output)
     print("torch result", output[0, 0])
     print("torch time", time.time() - start)
 
@@ -57,6 +59,37 @@ torch.onnx.export(model,         # model being run
     output_names = ['modelOutput'])
 
 if FP16:
-    os.system("trtexec --onnx=/tmp/ResNet18.onnx --saveEngine=/tmp/ResNet18.trt --fp16")
+    os.system(f"trtexec --onnx=/tmp/ResNet18.onnx --saveEngine={TRT_MODEL_PATH} --fp16")
 else:
-    os.system("trtexec --onnx=/tmp/ResNet18.onnx --saveEngine=/tmp/ResNet18.trt")
+    os.system(f"trtexec --onnx=/tmp/ResNet18.onnx --saveEngine={TRT_MODEL_PATH}")
+
+# Load serialized TensorRT model, and run inference.
+trt_logger = trt.Logger(trt.Logger.WARNING)
+runtime = trt.Runtime(trt_logger)
+with open(TRT_MODEL_PATH, "rb") as f:
+    engine = runtime.deserialize_cuda_engine(f.read())
+
+# inspector = engine.create_engine_inspector()
+# print('trt_engine layer_info:\n{}'.format(
+#     inspector.get_engine_information(trt.LayerInformationFormat.JSON)
+#     ))
+
+context = engine.create_execution_context()
+
+input_batch = input_batch.cpu().numpy()
+output = output.cpu().numpy()
+
+d_input = cuda.mem_alloc(1 * input_batch.nbytes)
+trt_output = np.empty_like(output)
+d_output = cuda.mem_alloc(1 * trt_output.nbytes)
+
+bindings = [int(d_input), int(d_output)]
+stream = cuda.Stream()
+
+cuda.memcpy_htod_async(d_input, input_batch, stream)
+context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+cuda.memcpy_dtoh_async(trt_output, d_output, stream)
+stream.synchronize()
+print("trt result", trt_output[0, 0])
+
+assert np.allclose(output, trt_output, atol=5e-2)
